@@ -11,7 +11,7 @@ import kotlinx.coroutines.*
 
 private const val LOG_TAG = "Pasori"
 private const val ACTION_USB_PERMISSION = "dev.mikeneko.USB_PERMISSION"
-private const val PRODUCT_NAME = "RC-S380/P"
+private const val PRODUCT_NAME = "RC-S380"
 private const val TIMEOUT = 50
 
 object PasoriReader {
@@ -59,7 +59,7 @@ object PasoriReader {
         }
 
         val deviceList: HashMap<String, UsbDevice> = manager.deviceList
-        val device = deviceList.values.find { it.productName == PRODUCT_NAME }
+        val device = deviceList.values.find { it.productName?.startsWith(PRODUCT_NAME) == true }
         if (device == null) {
             errorLog(Error.NOT_FOUND.toString())
             return Result.Failure(Error.NOT_FOUND)
