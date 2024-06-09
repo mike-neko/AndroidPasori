@@ -43,7 +43,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
             withContext(Dispatchers.Main) {
                 when (result) {
                     is PasoriReader.Result.Success -> {
-                        textView.text = result.ids.joinToString()
+                        textView.text = result.id
                     }
                     is PasoriReader.Result.Failure -> {
                         with(AlertDialog.Builder(this@MainActivity)) {
