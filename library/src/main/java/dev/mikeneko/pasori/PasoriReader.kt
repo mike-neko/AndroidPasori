@@ -48,6 +48,8 @@ object PasoriReader {
 
     var debug = true
 
+    private val adapters = arrayOf(PasoriS380S(), PasoriS380P(), PasoriS300S(), PasoriS300P())
+
     private var inEndpoint: UsbEndpoint? = null
     private var outEndpoint: UsbEndpoint? = null
     private var connection: UsbDeviceConnection? = null
@@ -64,7 +66,7 @@ object PasoriReader {
 
         val deviceList: HashMap<String, UsbDevice> = manager.deviceList
         val result = deviceList.values.asSequence().mapNotNull { device ->
-            val adapter = arrayOf(PasoriS380S(), PasoriS380P()).find { adapter -> adapter.matchesDevice(device) }
+            val adapter = adapters.find { adapter -> adapter.matchesDevice(device) }
             if (adapter != null) Pair(device, adapter) else null
         }.firstOrNull()
         if (result == null) {
