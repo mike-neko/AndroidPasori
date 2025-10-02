@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.*
 import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 
 private const val LOG_TAG = "Pasori"
@@ -153,9 +154,9 @@ object PasoriReader {
                 context.unregisterReceiver(usbReceiver)
             }
             context.run {
-                val permissionIntent = PendingIntent.getBroadcast(this, 0, Intent(ACTION_USB_PERMISSION), 0)
+                val permissionIntent = PendingIntent.getBroadcast(this, 0, Intent(ACTION_USB_PERMISSION), PendingIntent.FLAG_IMMUTABLE)
                 val filter = IntentFilter(ACTION_USB_PERMISSION)
-                registerReceiver(usbReceiver, filter)
+                ContextCompat.registerReceiver(this, usbReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
                 manager.requestPermission(device, permissionIntent)
             }
         }
