@@ -22,7 +22,6 @@ internal interface Adapter {
         return device.vendorId == vendorID && device.productId == productID
     }
     suspend fun open(pipe: PasoriReader.Pipe): Boolean = true
-    suspend fun close(pipe: PasoriReader.Pipe): Boolean = true
 
     suspend fun readTypeAUID(pipe: PasoriReader.Pipe): String?
     suspend fun readTypeFIDm(pipe: PasoriReader.Pipe): String?
@@ -51,13 +50,12 @@ object PasoriReader {
 
     private val adapters = arrayOf(PasoriS380S(), PasoriS380P(), PasoriS300S(), PasoriS300P())
 
-    private var inEndpoint: UsbEndpoint? = null
-    private var outEndpoint: UsbEndpoint? = null
-    private var connection: UsbDeviceConnection? = null
+    // 読み取り成功後も閉じずに保持し、同じリーダーへの次の asyncReadIDs で使い回す（透過セッション開始と RF ON を毎回払わない）
+    private var device: UsbDevice? = null
+    private var pipe: Pipe? = null
 
     suspend fun asyncReadIDs(context: Context): Result<String> {
         log("Call asyncReadIDs")
-        close()
 
         val manager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
         if (manager == null) {
@@ -75,6 +73,9 @@ object PasoriReader {
             return Result.Failure(Error.NOT_FOUND)
         }
         val (device, adapter) = result
+        if (device.deviceName != this.device?.deviceName) {
+            close()
+        }
 
         if (!manager.hasPermission(device)) {
             if(!requestPermission(context, manager, device)) {
@@ -83,7 +84,10 @@ object PasoriReader {
             }
         }
         val pipe: Pipe
-        device.getInterface(0).also {
+        val held = this.pipe
+        if (held != null) {
+            pipe = held
+        } else device.getInterface(0).also {
             val dirIn = (0..it.endpointCount).find { index -> it.getEndpoint(index).direction == UsbConstants.USB_DIR_IN }
             val dirOut = (0..it.endpointCount).find { index -> it.getEndpoint(index).direction == UsbConstants.USB_DIR_OUT }
             if (dirIn == null || dirOut == null) {
@@ -101,10 +105,12 @@ object PasoriReader {
             connection.claimInterface(it, true)
         }
 
-        if (!adapter.open(pipe)) {
-            close()
+        if (held == null && !adapter.open(pipe)) {
+            pipe.connection.close()
             return Result.Failure(Error.ERROR_OPEN)
         }
+        this.device = device
+        this.pipe = pipe
 
         log("start read...")
         try {
@@ -119,19 +125,18 @@ object PasoriReader {
                     return Result.Success(type3)
                 }
             }
-        } finally {
-            adapter.close(pipe)
+        } catch (e: Throwable) {
             close()
+            throw e
         }
     }
 
     @Synchronized
     fun close() {
         log("Call close")
-        connection?.close()
-        connection = null
-        inEndpoint = null
-        outEndpoint = null
+        pipe?.connection?.close()
+        pipe = null
+        device = null
     }
 
     private suspend fun requestPermission(context: Context, manager: UsbManager, device: UsbDevice): Boolean {
