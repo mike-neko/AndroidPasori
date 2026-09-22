@@ -52,7 +52,13 @@ internal open class PasoriS300Adapter(
     }
     override suspend fun readTypeAUID(pipe: PasoriReader.Pipe): String? {
         delay(50)
-        sendCommand(pipe, Command.SwitchProtocolTypeA) ?: return null
+        val switched = sendCommand(pipe, Command.SwitchProtocolTypeA) ?: return null
+        // GetData はカードと通信せず、リーダーが保持している UID を返すだけ。
+        // ファームウェア更新後の RC-S300 はカードを外した後も前回の UID を返すので、
+        // Type A の活性化（SwitchProtocol）が成功したときだけ GetData を送る
+        if (!isActivated(switched)) {
+            return null
+        }
         val result = sendCommand(pipe, Command.GetData) ?: return null
         if (result.size < 10) {
             return null
@@ -87,6 +93,20 @@ internal open class PasoriS300Adapter(
         }
         val idm = buffer.sliceArray(2 until 10)
         return idm.joinToString("") { "%02X".format(it) }
+    }
+
+    /**
+     * SwitchProtocol の応答がカード活性化の成功を示しているか。
+     * ヘッダーの bStatus（7 バイト目）のビット 7-6 が 00（コマンド成功）で、
+     * 本体（10 バイト目以降）の先頭がステータス TLV の成功値 C0 03 00 90 00 のとき true。
+     */
+    private fun isActivated(response: ByteArray): Boolean {
+        if (response.size < 15) {
+            return false
+        }
+        val commandSucceeded = (response[7].toInt() and 0xC0) == 0
+        val statusTlv = response.sliceArray(10 until 15)
+        return commandSucceeded && statusTlv.contentEquals(byteArrayOf(0xC0.toByte(), 0x03, 0x00, 0x90.toByte(), 0x00))
     }
 
     private suspend fun sendCommand(pipe: PasoriReader.Pipe, command: Command): ByteArray? {
